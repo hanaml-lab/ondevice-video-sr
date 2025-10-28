@@ -1,0 +1,19 @@
+# Paper configuration (Table 7). Requires teacher outputs (DOVE) on REDS + YouHQ; not runnable on the toy world.
+width: 48
+blocks_f: 8
+blocks_g: 4
+scale: 4
+bits_w: 8
+bits_a: 8
+hr: 256            # 64x64 LR crops
+unroll: 15
+iters_fp: 200000
+iters_qat: 100000
+lr: 0.0002
+gamma: 0.9
+lambda_contr: 0.1
+power_iters: 2
+bank_horizon: 300
+p_bank: 0.7
+loss_weights: [1.0, 1.0, 0.5]   # l1, perceptual (LPIPS), consistency matching; adversarial weight 0.05 set in the GAN wrapper
+seed: 0

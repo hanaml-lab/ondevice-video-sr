@@ -1,0 +1,18 @@
+# CPU toy setting: runs end to end in well under a minute.
+width: 16
+blocks_f: 2
+blocks_g: 1
+hr: 32
+videos: 4
+video_frames: 60
+unroll: 6
+iters_fp: 150
+iters_qat: 150
+lr: 0.002
+gamma: 0.9
+lambda_contr: 0.1
+power_iters: 2
+bank_horizon: 60
+p_bank: 0.7
+eval_frames: 120
+seed: 0
