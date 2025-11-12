@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the paper below."
+title: "DRIFT: drift-bounded distillation of one-step video diffusion into integer recurrent students"
+version: 0.1.0
+date-released: 2025-11-12
+license: Apache-2.0
+repository-code: "https://github.com/hanaml-lab/ondevice-video-sr"
+authors:
+  - family-names: Agarwal
+    given-names: Manav
+    affiliation: hanaML
+preferred-citation:
+  type: report
+  title: "DRIFT: Drift-Bounded Distillation of One-Step Video Diffusion into Integer Recurrent Students for Real-Time On-Device Super-Resolution"
+  authors:
+    - family-names: Agarwal
+      given-names: Manav
+  institution:
+    name: hanaML
+  year: 2025
