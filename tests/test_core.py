@@ -4,7 +4,8 @@ import pytest
 import torch
 
 from drift_vsr import (LSQ, DriftStudent, StateBank, consistency_matching, drift_at, drift_bound,
-                       jacobian_spectral_norm, residual_suppression, set_quant, warp)
+                       jacobian_spectral_norm, residual_suppression, set_quant, state_error_trajectory, warp)
+from drift_vsr.metrics import rounding_decomposition
 from drift_vsr.train import Config, train
 
 
@@ -84,3 +85,29 @@ def test_train_end_to_end_tiny():
     res = train(cfg, log=lambda s: None)
     assert math.isfinite(res["psnr"]) and len(res["history"]) == 8
     assert any(h["sigma"] > 0 for h in res["history"] if h["qat"])
+
+
+def test_rounding_decomposition_obeys_the_recursion():
+    torch.manual_seed(0)
+    m = DriftStudent(width=8, blocks_f=1, blocks_g=1)
+    clip = torch.rand(1, 30, 3, 8, 8)
+    set_quant(m, True)
+    with torch.no_grad():
+        m(clip[:, :2])  # initialise the quantisers' steps
+    dec = rounding_decomposition(m, clip, ("state", "w8a8"), ref=torch.rand(1, 30, 3, 32, 32))
+    for mode, d in dec.items():
+        assert len(d["err"]) == len(d["inj"]) == len(d["gain"]) == 30 and d["gain"][0] is None
+        assert d["err"][0] == pytest.approx(d["inj"][0], rel=1e-4, abs=1e-6)  # no error before the first step
+        for t in range(1, 30):  # err_t <= gain_t * err_{t-1} + inj_t (Proposition 1, one step)
+            assert d["err"][t] <= d["gain"][t] * d["err"][t - 1] + d["inj"][t] + 1e-5
+    assert len(dec["w8a8"]["psnr"]) == 30 and not dec["state"]["psnr"]
+    # the deployed error is the one state_error_trajectory measures
+    assert dec["w8a8"]["err"] == pytest.approx(state_error_trajectory(m, clip), rel=1e-4, abs=1e-6)
+    # with a range the state never leaves, rounding only the state injects at most half a step per element
+    set_quant(m, False)
+    with torch.no_grad():
+        _, _, ctx = m(clip)
+        top = max(float(m.transition(*c).abs().max()) for c in ctx)
+        m.state_q.step.fill_(2 * top / m.state_q.qp)
+    inj = rounding_decomposition(m, clip, ("state",))["state"]["inj"]
+    assert max(inj) <= 0.5 * float(m.state_q.step) * math.sqrt(8 * 8 * 8) + 1e-6

@@ -15,5 +15,6 @@ lambda_contr: 0.1
 power_iters: 2
 bank_horizon: 60
 p_bank: 0.7
-eval_frames: 120
+eval_frames: 2000    # a held-out stream long enough to see error accumulate, far beyond the 60 training frames
+jacobian_stride: 100 # estimate the state-Jacobian norm at every 100th frame of it
 seed: 0

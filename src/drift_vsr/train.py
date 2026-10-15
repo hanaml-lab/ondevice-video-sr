@@ -11,7 +11,7 @@ import yaml
 
 from .contraction import contraction_penalty, jacobian_spectral_norm
 from .losses import distillation_loss
-from .metrics import drift_at, per_frame, psnr, relative_state_error, state_error_trajectory, state_jacobian_norms
+from .metrics import drift_at, per_frame, psnr, rounding_decomposition, state_jacobian_norms
 from .model import DriftStudent
 from .quant import set_quant
 from .statebank import StateBank
@@ -40,6 +40,7 @@ class Config:
     p_bank: float = 0.7
     loss_weights: list = field(default_factory=lambda: [1.0, 1.0, 0.5])
     eval_frames: int = 120
+    jacobian_stride: int = 4  # estimate the state-Jacobian norm at every n-th frame of the evaluation stream
     seed: int = 0
     threads: int = 0  # torch CPU threads; 0 keeps torch's default
 
@@ -100,20 +101,32 @@ def train(cfg: Config, log=print) -> dict:
 
 @torch.no_grad()
 def evaluate(model: DriftStudent, cfg: Config) -> dict:
+    """W8A8 quality on a held-out stream, and Proposition 1 measured along it.
+
+    For the recurrent state rounded alone ("state") and for the deployed W8A8 student ("w8a8"), ``rounding[mode]``
+    holds eps, the largest error a single step injects; gamma, the largest one-step gain of the accumulated error;
+    the bound eps / (1 - gamma) (infinite unless gamma < 1); and, per frame, the accumulated error ``err``.
+    """
     lr, hr = make_clip(cfg.eval_frames, cfg.hr, cfg.scale, seed=10_000 + cfg.seed)
-    set_quant(model, True)
-    out, _, _ = model(lr)
-    scores = per_frame(psnr, out, hr)
-    err = state_error_trajectory(model, lr)
+    dec = rounding_decomposition(model, lr, ("state", "w8a8"), ref=hr)
+    scores = dec["w8a8"].pop("psnr")
+    dec["state"].pop("psnr")
     bic = torch.nn.functional.interpolate(lr.flatten(0, 1), scale_factor=cfg.scale, mode="bilinear",
                                           align_corners=False).view_as(hr)
-    rel = relative_state_error(model, lr)
+    rounding = {}
+    for mode, d in dec.items():
+        eps = max(d["inj"])
+        gamma = max((g for g in d["gain"] if g is not None), default=0.0)
+        rounding[mode] = dict(eps=eps, gamma=gamma, bound=eps / (1 - gamma) if gamma < 1 else float("inf"), **d)
     with torch.enable_grad():
-        sig = state_jacobian_norms(model, lr, stride=4)
+        sig = state_jacobian_norms(model, lr, stride=cfg.jacobian_stride)
+    w = rounding["w8a8"]
+    rel = [e / max(n, 1e-12) for e, n in zip(w["err"], w["norm"])]
     return dict(psnr=sum(scores) / len(scores), psnr_bilinear=sum(per_frame(psnr, bic, hr)) / len(scores),
-                drift_psnr=drift_at(scores, cfg.eval_frames), state_error_final=err[-1],
-                state_error_max=max(err), state_error_rel_first=rel[0], state_error_rel_final=rel[-1], state_error_rel_max=max(rel),
-                sigma_mean=sum(sig) / len(sig), sigma_max=max(sig), alpha=float(model.alpha))
+                drift_psnr=drift_at(scores, cfg.eval_frames), state_error_final=w["err"][-1],
+                state_error_max=max(w["err"]), state_error_rel_first=rel[0], state_error_rel_final=rel[-1],
+                state_error_rel_max=max(rel), sigma_mean=sum(sig) / len(sig), sigma_max=max(sig),
+                alpha=float(model.alpha), rounding=rounding)
 
 
 def main(argv=None):
@@ -126,7 +139,8 @@ def main(argv=None):
     if a.no_contraction:
         cfg.lambda_contr = 0.0
     res = train(cfg)
-    summary = {k: v for k, v in res.items() if k not in ("history", "model")}
+    summary = {k: v for k, v in res.items() if k not in ("history", "model", "rounding")}
+    summary["rounding"] = {m: {k: r[k] for k in ("eps", "gamma", "bound")} for m, r in res["rounding"].items()}
     print(json.dumps(summary, indent=1, default=str))
     if a.out:
         with open(a.out, "w") as f:
