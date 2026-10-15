@@ -1,5 +1,5 @@
 # CPU toy setting for python -m drift_vsr.demo (two training runs) and python -m drift_vsr.train (one).
-threads: 4            # torch CPU threads, so runs on different machines take the same code paths
+threads: 1            # one CPU thread: the results do not depend on the core count, and tiny tensors gain nothing from more
 width: 16
 blocks_f: 2
 blocks_g: 1
