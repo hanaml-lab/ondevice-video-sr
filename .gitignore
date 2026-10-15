@@ -2,4 +2,8 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 toy_metrics.json
+student.pt
+upscaled.npy
 paper/results.json
+paper/tables/
+paper/figures/

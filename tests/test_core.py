@@ -76,7 +76,7 @@ def test_model_shapes_and_quant_toggle():
     set_quant(m, False)
     out2, _, _ = m(clip)
     assert out2.shape == out.shape
-    assert 0 < float(m.alpha) < 1
+    assert 0 < float(m.alpha.detach()) < 1
 
 
 def test_train_end_to_end_tiny():
