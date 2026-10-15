@@ -34,18 +34,26 @@ python scripts/drift_curve.py                 # Proposition 1 bound against a si
 
 ## Toy run (real output)
 
-The toy world is a moving band-limited texture. Its high-resolution frames stand in for teacher outputs, so the whole objective runs offline: LSQ, the state bank, the power-iteration penalty and the measurements. The demo trains a small student twice, with and without the contraction penalty, and evaluates both in W8A8 on a held-out 120-frame clip. Output of `python -m drift_vsr.demo` on one CPU thread (Python 3.12):
+The toy world is a moving band-limited texture. Its high-resolution frames stand in for teacher outputs, so the whole objective runs offline: LSQ, the state bank, the power-iteration penalty and the measurements. The demo trains a small student twice on one CPU thread, with and without the contraction penalty, and runs each over a held-out stream of 2,000 frames. Beside the W8A8 student it runs the real-valued recurrence and a copy that rounds only the recurrent state, and measures what Proposition 1 is about: eps, the largest error one step injects into the state; gamma*, the largest factor by which one step carries the accumulated error forward; and the accumulated error itself, early and late in the stream. Output of `python -m drift_vsr.demo` (Python 3.12):
 
 ```
-W8A8 student, 29,666 parameters; 150 FP + 150 QAT steps; held-out clip of 120 frames, x4
-                                PSNR bilinear  drift sigma mean sigma max err first err last
-DRIFT (contraction penalty)    25.77    23.94   0.16       0.92      1.01     0.587    0.579
-same, without the penalty      26.53    23.94  -0.37       3.18      3.47     0.104    0.119
-target gamma = 0.9; drift: PSNR of the first 10 frames minus the last 10 (dB); err: ||h_quant - h_float|| / ||h_float|| at the first and last frame
-done in 66.7s
+W8A8 student, 29,666 parameters; 150 FP + 150 QAT steps on 60-frame videos; held-out stream of 2,000 frames, x4
+                                PSNR  bilinear  drift  sigma mean  sigma max
+DRIFT (contraction penalty)    25.78     23.98  -0.57        0.93       0.97
+same, without the penalty      26.61     23.98  -0.68        3.19       3.43
+
+Accumulated state error ||h_round - h_float||, in units of eps, mean over frames:
+                                  eps  gamma*  1/(1-gamma*)    1-10  91-100  991-1000  1991-2000    max
+DRIFT, state rounded only      2.2879    0.15           1.2    0.98    0.79      0.94       0.95   1.03
+DRIFT, W8A8                    2.3050    0.16           1.2    0.99    0.80      0.94       0.95   1.03
+no penalty, state rounded only 0.0428    0.50           2.0    1.01    1.02      1.02       1.03   1.13
+no penalty, W8A8               0.1446    0.42           1.7    0.95    0.84      0.90       0.94   1.08
+eps: the largest error one step injects; gamma*: the largest factor by which one step carries the error forward. Proposition 1 bounds the error by eps/(1-gamma*) when gamma* < 1 (target gamma = 0.9).
+drift: PSNR of the first 10 frames minus the last 10 (dB); sigma: state-Jacobian norm estimate at every 100th frame
+done in 52.9s
 ```
 
-The penalty holds the state-Jacobian norm estimate near γ, where the unpenalised recurrence is expansive. In this toy that does not reduce the quantised state's error: the error is set at the first frame, changes little over the clip in either run, and is larger with the penalty. The toy therefore checks that the method runs end to end; it does not reproduce the report's drift result. `paper/toy_run.md` records the environment and what each line shows.
+With the penalty the error stays bounded, as Proposition 1 says it must: no step carries more than 0.16 of it forward, so it never exceeds about one step's rounding (1.03 eps, under the bound of 1.2 eps). Without the penalty it does not accumulate either. The unpenalised student's state-Jacobian norm estimate averages 3.19, yet no step carries more than half of the actual error forward (gamma* 0.50), and after 2,000 frames the error is still about one step's rounding. So the toy does not reproduce the report's drift result: its unpenalised student already contracts the rounding error where it matters, and there is no accumulation for the penalty to remove. Seeds 1 and 2 give the same picture. The toy checks that the bound holds where its premise does, that the measurement is right and that the method runs end to end. `paper/toy_run.md` records the environment, what was fixed before the run, the other seeds and what each line shows.
 
 ## Upscaling your own clip
 
@@ -101,7 +109,7 @@ Full training needs teacher outputs, made offline with the public Upscale-A-Vide
 | `src/drift_vsr/contraction.py` | Power-iteration spectral-norm estimator, penalty, Proposition 1 bound |
 | `src/drift_vsr/statebank.py` | State bank for long-rollout QAT |
 | `src/drift_vsr/losses.py` | Distillation loss, consistency matching, residual suppression baseline |
-| `src/drift_vsr/metrics.py` | drift@T, state error (absolute and relative to the state), state-Jacobian norm along a stream, PSNR |
+| `src/drift_vsr/metrics.py` | drift@T, state error (absolute and relative to the state), Proposition 1's quantities along a stream (`rounding_decomposition`), state-Jacobian norm along a stream, PSNR |
 | `src/drift_vsr/train.py`, `demo.py` | Algorithm 1 training loop and CLI; the toy run with and without the penalty |
 | `configs/` | `toy.yaml` (CPU) and `drift_x4.yaml` (report) |
 | `examples/` | `upscale_clip.py`, and a toy clip in `data/` |
