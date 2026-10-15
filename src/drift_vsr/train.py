@@ -11,7 +11,7 @@ import yaml
 
 from .contraction import contraction_penalty, jacobian_spectral_norm
 from .losses import distillation_loss
-from .metrics import drift_at, per_frame, psnr, state_error_trajectory
+from .metrics import drift_at, per_frame, psnr, relative_state_error, state_error_trajectory, state_jacobian_norms
 from .model import DriftStudent
 from .quant import set_quant
 from .statebank import StateBank
@@ -41,6 +41,7 @@ class Config:
     loss_weights: list = field(default_factory=lambda: [1.0, 1.0, 0.5])
     eval_frames: int = 120
     seed: int = 0
+    threads: int = 0  # torch CPU threads; 0 keeps torch's default
 
     @classmethod
     def from_yaml(cls, path: str) -> "Config":
@@ -49,6 +50,8 @@ class Config:
 
 
 def train(cfg: Config, log=print) -> dict:
+    if cfg.threads:
+        torch.set_num_threads(cfg.threads)
     torch.manual_seed(cfg.seed)
     model = DriftStudent(cfg.width, cfg.blocks_f, cfg.blocks_g, cfg.scale, cfg.bits_w, cfg.bits_a)
     data = make_dataset(cfg.videos, cfg.video_frames, cfg.hr, cfg.scale, seed=cfg.seed)
@@ -91,7 +94,7 @@ def train(cfg: Config, log=print) -> dict:
         if it % 20 == 0 or it == total - 1:
             log(f"it {it:4d} {'QAT' if qat else 'FP '} loss {loss.detach().item():.4f} sigma {sigma.detach().mean().item():.3f}")
     res = evaluate(model, cfg)
-    res.update(seconds=time.time() - t0, history=hist, config=asdict(cfg))
+    res.update(seconds=time.time() - t0, history=hist, config=asdict(cfg), model=model)
     return res
 
 
@@ -104,9 +107,13 @@ def evaluate(model: DriftStudent, cfg: Config) -> dict:
     err = state_error_trajectory(model, lr)
     bic = torch.nn.functional.interpolate(lr.flatten(0, 1), scale_factor=cfg.scale, mode="bilinear",
                                           align_corners=False).view_as(hr)
+    rel = relative_state_error(model, lr)
+    with torch.enable_grad():
+        sig = state_jacobian_norms(model, lr, stride=4)
     return dict(psnr=sum(scores) / len(scores), psnr_bilinear=sum(per_frame(psnr, bic, hr)) / len(scores),
                 drift_psnr=drift_at(scores, cfg.eval_frames), state_error_final=err[-1],
-                state_error_max=max(err), alpha=float(model.alpha))
+                state_error_max=max(err), state_error_rel_first=rel[0], state_error_rel_final=rel[-1], state_error_rel_max=max(rel),
+                sigma_mean=sum(sig) / len(sig), sigma_max=max(sig), alpha=float(model.alpha))
 
 
 def main(argv=None):
@@ -119,11 +126,11 @@ def main(argv=None):
     if a.no_contraction:
         cfg.lambda_contr = 0.0
     res = train(cfg)
-    summary = {k: v for k, v in res.items() if k != "history"}
+    summary = {k: v for k, v in res.items() if k not in ("history", "model")}
     print(json.dumps(summary, indent=1, default=str))
     if a.out:
         with open(a.out, "w") as f:
-            json.dump(res, f, indent=1, default=str)
+            json.dump({k: v for k, v in res.items() if k != "model"}, f, indent=1, default=str)
     return res
 
 

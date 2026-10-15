@@ -37,6 +37,49 @@ def state_error_trajectory(model, stream: torch.Tensor) -> list[float]:
     return out
 
 
+def relative_state_error(model, stream: torch.Tensor) -> list[float]:
+    """||h~_t - h_t|| / ||h_t|| per frame: the quantised state's error relative to the size of the float state."""
+    out = []
+    set_quant(model, False)
+    hf = model.init_state(stream[:, 0])
+    hq = hf.clone()
+    xp = stream[:, 0]
+    with torch.no_grad():
+        for t in range(stream.shape[1]):
+            x = stream[:, t]
+            set_quant(model, False)
+            hf, _, _ = model.step(hf, xp, x)
+            set_quant(model, True)
+            hq, _, _ = model.step(hq, xp, x)
+            err = (hq - hf).flatten(1).norm(dim=1) / hf.flatten(1).norm(dim=1).clamp_min(1e-12)
+            out.append(float(err.mean()))
+            xp = x
+    set_quant(model, True)
+    return out
+
+
+def state_jacobian_norms(model, stream: torch.Tensor, iters: int = 8, stride: int = 1) -> list[float]:
+    """Power-iteration estimate of ||d h_t / d h_{t-1}||_2 of the real-valued transition along the float trajectory
+    (Phi_t in Proposition 1), at every ``stride``-th frame."""
+    from .contraction import jacobian_spectral_norm
+
+    out = []
+    set_quant(model, False)
+    with torch.no_grad():
+        h = model.init_state(stream[:, 0])
+    xp = stream[:, 0]
+    for t in range(stream.shape[1]):
+        x = stream[:, t]
+        if t % stride == 0:
+            sigma, _ = jacobian_spectral_norm(lambda s, xp=xp, x=x: model.step(s, xp, x)[0], h, iters=iters)
+            out.append(float(sigma.detach().mean()))
+        with torch.no_grad():
+            h, _, _ = model.step(h, xp, x)
+        xp = x
+    set_quant(model, True)
+    return out
+
+
 def psnr(a: torch.Tensor, b: torch.Tensor) -> float:
     mse = (a.clamp(0, 1) - b.clamp(0, 1)).pow(2).mean()
     return float(10 * torch.log10(1.0 / mse.clamp_min(1e-12)))
