@@ -37,6 +37,8 @@ def main(argv=None) -> dict:
     args = ap.parse_args(argv)
     ck = torch.load(args.checkpoint)
     c = ck["config"]
+    if c.get("threads"):
+        torch.set_num_threads(c["threads"])  # the CPU threads the student was trained with
     model = DriftStudent(c["width"], c["blocks_f"], c["blocks_g"], c["scale"], c["bits_w"], c["bits_a"])
     model.load_state_dict(ck["state_dict"])
     model.eval()
