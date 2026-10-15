@@ -1,4 +1,4 @@
-# Paper configuration (Table 7). Requires teacher outputs (DOVE) on REDS + YouHQ; not runnable on the toy world.
+# Paper configuration (Table S1). Requires teacher outputs (Upscale-A-Video, 30 steps) on REDS + YouHQ; not runnable on the toy world.
 width: 48
 blocks_f: 8
 blocks_g: 4

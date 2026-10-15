@@ -2,10 +2,10 @@
 
 [![ci](https://github.com/hanaml-lab/ondevice-video-sr/actions/workflows/ci.yml/badge.svg)](https://github.com/hanaml-lab/ondevice-video-sr/actions/workflows/ci.yml)
 
-Reference implementation of *DRIFT: Drift-Bounded Distillation of One-Step Video Diffusion into Integer Recurrent Students for Real-Time On-Device Super-Resolution* (Agarwal, hanaML technical report, 2025).
+Reference implementation of *DRIFT: Drift-Bounded Distillation of Video Diffusion into Integer Recurrent Students for Real-Time On-Device Super-Resolution* (Agarwal, hanaML preprint, 2024).
 
 When a recurrent video super-resolution network runs in INT8, rounding error enters the hidden state every frame
-and builds up over the stream. DRIFT distils a one-step video diffusion teacher (DOVE) into a 1.9M-parameter
+and builds up over the stream. DRIFT distils a video diffusion teacher (Upscale-A-Video) into a 1.9M-parameter
 unidirectional recurrent student and bounds that error by construction:
 
 - **Gated contractive recurrence.** `h_t = (1-g)·α·W(h_{t-1}) + g·c`. A contraction regulariser pushes the
@@ -82,15 +82,15 @@ These numbers come from the report's seeded simulation and are illustrative. Sna
 | Method | Params | VideoLQ DOVER ↑ | REDS30 LPIPS ↓ | drift@1000 ↓ | NPU ms/frame |
 | --- | --- | --- | --- | --- | --- |
 | RealBasicVSR (INT8 PTQ) | 6.3M | 0.672 | 0.262 | – | 118.0 |
-| DOVE (teacher, A100 only) | 5.6B | 0.748 | 0.244 | – | does not fit |
-| Student, W8A8 PTQ | 1.9M | 0.684 | 0.284 | 0.137 | 21.4 |
-| Student, W8A8 QAT | 1.9M | 0.718 | 0.262 | 0.064 | 21.4 |
-| **DRIFT W8A8** | 1.9M | **0.729** | **0.254** | **0.005** | 21.4 |
-| DRIFT W4A8 | 1.9M | 0.707 | 0.271 | 0.014 | 14.9 |
+| Upscale-A-Video (teacher, A100 only) | 1.1B | 0.714 | 0.271 | – | does not fit |
+| Student, W8A8 PTQ | 1.9M | 0.650 | 0.284 | 0.137 | 21.4 |
+| Student, W8A8 QAT | 1.9M | 0.684 | 0.262 | 0.064 | 21.4 |
+| **DRIFT W8A8** | 1.9M | **0.695** | **0.254** | **0.005** | 21.4 |
+| DRIFT W4A8 | 1.9M | 0.673 | 0.271 | 0.014 | 14.9 |
 
 `bash scripts/reproduce_paper.sh` regenerates the tables and figures that the report's seeded simulation produces. On every push, CI reruns `paper/make_data.py` and checks the tables and results it writes against `paper/results.sha256` (`python paper/check_results.py`).
 
-Full training needs teacher outputs, made offline with the public DOVE checkpoint on REDS and YouHQ, and the LPIPS and discriminator terms. `configs/drift_x4.yaml` lists the hyperparameters. The toy path replaces LPIPS with a gradient-domain stand-in.
+Full training needs teacher outputs, made offline with the public Upscale-A-Video release (30 steps) on REDS and YouHQ, and the LPIPS and discriminator terms. `configs/drift_x4.yaml` lists the hyperparameters. The toy path replaces LPIPS with a gradient-domain stand-in.
 
 ## Layout
 
@@ -111,12 +111,12 @@ Full training needs teacher outputs, made offline with the public DOVE checkpoin
 ## Citation
 
 ```bibtex
-@techreport{agarwal2025drift,
-  title       = {{DRIFT}: Drift-Bounded Distillation of One-Step Video Diffusion into Integer Recurrent
+@techreport{agarwal2024drift,
+  title       = {{DRIFT}: Drift-Bounded Distillation of Video Diffusion into Integer Recurrent
                  Students for Real-Time On-Device Super-Resolution},
   author      = {Agarwal, Manav},
   institution = {hanaML},
-  year        = {2025}
+  year        = {2024}
 }
 ```
 

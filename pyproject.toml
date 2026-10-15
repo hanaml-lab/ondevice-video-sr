@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "drift-vsr"
 version = "0.1.0"
-description = "DRIFT: drift-bounded distillation of one-step video diffusion into integer recurrent students"
+description = "DRIFT: drift-bounded distillation of video diffusion into integer recurrent students"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Manav Agarwal", email = "manav@hanaml.com" }]

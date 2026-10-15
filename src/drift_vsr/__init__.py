@@ -1,4 +1,4 @@
-"""DRIFT: drift-bounded distillation of one-step video diffusion into integer recurrent students."""
+"""DRIFT: drift-bounded distillation of video diffusion into integer recurrent students."""
 from .contraction import contraction_penalty, drift_bound, jacobian_spectral_norm
 from .losses import consistency_matching, distillation_loss, residual_suppression
 from .metrics import drift_at, state_error_trajectory
